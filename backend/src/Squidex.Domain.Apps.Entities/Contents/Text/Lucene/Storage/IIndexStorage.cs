@@ -14,10 +14,10 @@ namespace Squidex.Domain.Apps.Entities.Contents.Text.Lucene
 {
     public interface IIndexStorage
     {
-        Task<Directory> CreateDirectoryAsync(Guid schemaId);
-
-        Task ClearAsync();
+        Task<Directory> CreateDirectoryAsync(Guid ownerId);
 
         Task WriteAsync(Directory directory, SnapshotDeletionPolicy snapshotter);
+
+        Task ClearAsync();
     }
 }

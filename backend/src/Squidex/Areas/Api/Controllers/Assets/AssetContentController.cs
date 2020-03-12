@@ -68,7 +68,7 @@ namespace Squidex.Areas.Api.Controllers.Assets
         [ApiPermission]
         [ApiCosts(0.5)]
         [AllowAnonymous]
-        public async Task<IActionResult> GetAssetContentBySlug(string app, string idOrSlug, string more, [FromQuery] AssetQuery query)
+        public async Task<IActionResult> GetAssetContentBySlug(string app, string idOrSlug, string more, [FromQuery] AssetContentQueryDto query)
         {
             IAssetEntity? asset;
 
@@ -99,16 +99,16 @@ namespace Squidex.Areas.Api.Controllers.Assets
         [ApiPermission]
         [ApiCosts(0.5)]
         [AllowAnonymous]
-        public async Task<IActionResult> GetAssetContent(Guid id, [FromQuery] AssetQuery query)
+        public async Task<IActionResult> GetAssetContent(Guid id, [FromQuery] AssetContentQueryDto query)
         {
             var asset = await assetRepository.FindAssetAsync(id);
 
             return DeliverAsset(asset, query);
         }
 
-        private IActionResult DeliverAsset(IAssetEntity? asset, AssetQuery query)
+        private IActionResult DeliverAsset(IAssetEntity? asset, AssetContentQueryDto query)
         {
-            query ??= new AssetQuery();
+            query ??= new AssetContentQueryDto();
 
             if (asset == null || asset.FileVersion < query.Version)
             {
@@ -164,14 +164,14 @@ namespace Squidex.Areas.Api.Controllers.Assets
                 }
             });
 
-            if (query.Download == 1 || asset.Type != AssetType.Image)
+            var inline = query.Download != 1;
+
+            return new FileCallbackResult(asset.MimeType, asset.FileName, handler)
             {
-                return new FileCallbackResult(asset.MimeType, asset.FileName, true, handler);
-            }
-            else
-            {
-                return new FileCallbackResult(asset.MimeType, null, true, handler);
-            }
+                LastModified = asset.LastModified.ToDateTimeOffset(),
+                Send404 = true,
+                SendInline = inline,
+            };
         }
 
         private async Task ResizeAsync(IAssetEntity asset, Stream bodyStream, string fileName, long fileVersion, ResizeOptions resizeOptions, bool overwrite)

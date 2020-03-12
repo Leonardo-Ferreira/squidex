@@ -40,6 +40,7 @@ module.exports = function (env) {
     const isTests = env && env.target === 'tests';
     const isTestCoverage = env && env.coverage;
     const isAnalyzing = isProduction && env.analyze;
+    const isAot = !isDevServer;
 
     const configFile = isTests ? 'tsconfig.spec.json' : 'tsconfig.app.json';
 
@@ -295,8 +296,8 @@ module.exports = function (env) {
             new plugins.NgToolsWebpack.AngularCompilerPlugin({
                 directTemplateLoading: true,
                 entryModule: 'app/app.module#AppModule',
+                skipCodeGeneration: !isAot,
                 sourceMap: !isProduction,
-                skipCodeGeneration: false,
                 tsConfigPath: configFile
             })
         );

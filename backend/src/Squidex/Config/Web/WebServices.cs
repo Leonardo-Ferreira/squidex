@@ -46,6 +46,9 @@ namespace Squidex.Config.Web
             services.AddSingletonAs<LocalCacheMiddleware>()
                 .AsSelf();
 
+            services.AddSingletonAs<UsageMiddleware>()
+                .AsSelf();
+
             services.AddSingletonAs<RequestExceptionMiddleware>()
                 .AsSelf();
 
@@ -63,9 +66,6 @@ namespace Squidex.Config.Web
 
             services.AddSingletonAs<ActionContextAccessor>()
                 .As<IActionContextAccessor>();
-
-            services.AddSingletonAs<DefaultExceptionHandler>()
-                .AsOptional<IExceptionHandler>();
 
             services.Configure<ApiBehaviorOptions>(options =>
             {

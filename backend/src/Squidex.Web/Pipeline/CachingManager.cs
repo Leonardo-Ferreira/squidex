@@ -12,6 +12,8 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.ObjectPool;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Primitives;
 using Microsoft.Net.Http.Headers;
 using Squidex.Infrastructure;
@@ -22,6 +24,8 @@ namespace Squidex.Web.Pipeline
 {
     public sealed class CachingManager : IRequestCache
     {
+        private readonly ObjectPool<StringBuilder> stringBuilderPool;
+        private readonly CachingOptions cachingOptions;
         private readonly IHttpContextAccessor httpContextAccessor;
 
         internal sealed class CacheContext : IRequestCache, IDisposable
@@ -83,7 +87,7 @@ namespace Squidex.Web.Pipeline
                 }
             }
 
-            public void Finish(HttpResponse response, int maxSurrogateKeys)
+            public void Finish(HttpResponse response, int maxSurrogateKeySize, ObjectPool<StringBuilder> stringBuilderPool)
             {
                 if (hasDependency && !response.Headers.ContainsKey(HeaderNames.ETag))
                 {
@@ -96,11 +100,44 @@ namespace Squidex.Web.Pipeline
                     }
                 }
 
-                if (keys.Count <= maxSurrogateKeys)
+                if (keys.Count > 0 && maxSurrogateKeySize > 0)
                 {
-                    var value = string.Join(" ", keys);
+                    const int GuidLength = 36;
 
-                    response.Headers.Add("Surrogate-Key", value);
+                    var stringBuilder = stringBuilderPool.Get();
+                    try
+                    {
+                        foreach (var key in keys)
+                        {
+                            if (stringBuilder.Length == 0)
+                            {
+                                if (stringBuilder.Length + GuidLength > maxSurrogateKeySize)
+                                {
+                                    break;
+                                }
+                            }
+                            else
+                            {
+                                if (stringBuilder.Length + GuidLength + 1 > maxSurrogateKeySize)
+                                {
+                                    break;
+                                }
+
+                                stringBuilder.Append(' ');
+                            }
+
+                            stringBuilder.Append(key);
+                        }
+
+                        if (stringBuilder.Length > 0)
+                        {
+                            response.Headers.Add("Surrogate-Key", stringBuilder.ToString());
+                        }
+                    }
+                    finally
+                    {
+                        stringBuilderPool.Return(stringBuilder);
+                    }
                 }
 
                 if (headers.Count > 0)
@@ -127,11 +164,19 @@ namespace Squidex.Web.Pipeline
             }
         }
 
-        public CachingManager(IHttpContextAccessor httpContextAccessor)
+        public CachingManager(IHttpContextAccessor httpContextAccessor, IOptions<CachingOptions> cachingOptions)
         {
             Guard.NotNull(httpContextAccessor);
+            Guard.NotNull(cachingOptions);
 
             this.httpContextAccessor = httpContextAccessor;
+
+            this.cachingOptions = cachingOptions.Value;
+
+            stringBuilderPool = new DefaultObjectPool<StringBuilder>(new StringBuilderPooledObjectPolicy
+            {
+                MaximumRetainedCapacity = cachingOptions.Value.MaxSurrogateKeysSize
+            });
         }
 
         public void Start(HttpContext httpContext)
@@ -180,7 +225,7 @@ namespace Squidex.Web.Pipeline
             }
         }
 
-        public void Finish(HttpContext httpContext, int maxSurrogateKeys)
+        public void Finish(HttpContext httpContext)
         {
             Guard.NotNull(httpContext);
 
@@ -188,7 +233,7 @@ namespace Squidex.Web.Pipeline
 
             if (cacheContext != null)
             {
-                cacheContext.Finish(httpContext.Response, maxSurrogateKeys);
+                cacheContext.Finish(httpContext.Response, cachingOptions.MaxSurrogateKeysSize, stringBuilderPool);
             }
         }
     }
